@@ -24,12 +24,15 @@ class AccountBalanceTool(BaseTool):
     name: str = "Get Account Balance"
     description: str = "Useful to check how much cash is available to trade."
     provider: MarketDataProvider = Field(exclude=True)
+    exchange: Any = Field(default=None, exclude=True)
 
     def _run(self, dummy_arg: str = "none") -> str:
-        # dummy_arg is sometimes needed if the LLM insists on sending something
         try:
-            balance = self.provider.get_account_balance()
-            return f"Current available cash: ${balance}"
+            if self.exchange:
+                return f"Current available cash (SIMULATED): ${self.exchange.cash}"
+            else:
+                bal = self.provider.get_account_balance()
+                return f"Current available cash (REAL): ${bal}"
         except Exception as e:
             return f"Error fetching balance: {str(e)}"
 

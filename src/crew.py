@@ -3,19 +3,22 @@ from langchain.tools import tool
 from textwrap import dedent
 from src.tools.market_tools import StockPriceTool, StockHistoryTool, AccountBalanceTool
 from src.tools.calculator import CalculatorTools
+from src.tools.execution_tools import ExecuteTradeTool
 
 class TradingCrew:
-    def __init__(self, provider):
+    def __init__(self, provider, exchange=None):
         """
         :param provider: An instance of AlpacaDataProvider (Real) or MockDataProvider.
         """
         self.provider = provider
+        self.exchange = exchange # VirtualExchange or alpaca exchange if None
         
         # Instantiate Tools with the specific provider
         self.price_tool = StockPriceTool(provider=provider)
         self.history_tool = StockHistoryTool(provider=provider)
-        self.balance_tool = AccountBalanceTool(provider=provider)
+        self.balance_tool = AccountBalanceTool(provider=provider, exchange=exchange)
         self.calc_tool = CalculatorTools().calculate
+        self.execution_tool = ExecuteTradeTool(provider=provider)
 
     def build_crew(self, current_date: str, stock_selection: list):
         """
@@ -74,16 +77,21 @@ class TradingCrew:
 
         head_trader = Agent(
             role='Head Trader',
-            goal='Execute the best trade decision based on team input.',
+            goal='Listen to the team and EXECUTE trades directly.',
             backstory=dedent(f"""
                 You are the Head Trader. The current date is {current_date}.
-                You listen to the Researcher (News), Analyst (Price), and Risk Manager (Safety).
-                You synthesize their inputs into a FINAL decision.
-                Your output must be a clear JSON-like instruction:
-                {{ "action": "BUY/SELL/HOLD", "ticker": "XYZ", "quantity": 10, "reason": "..." }}
+                You have the authority to buy and sell.
+                
+                PROCESS:
+                1. Review analysis from Researcher and Analyst.
+                2. Check with Risk Manager for MAX position size (Crucial!).
+                3. If the signal is strong and Risk Manager approves:
+                   USE the 'Execute Trade' tool immediately.
+                4. If no trade is needed, just say "Holding cash."
             """),
+            tools=[self.execution_tool], # Give them the button
             verbose=True,
-            allow_delegation=True # The boss can ask questions to others if needed
+            allow_delegation=True
         )
 
         # --- 2. THE TASKS ---
@@ -111,10 +119,9 @@ class TradingCrew:
 
         # Task 4: Execution
         trade_task = Task(
-            description="Review reports from Researcher, Analyst, and Risk Manager. Decide what to trade.",
+            description="Synthesize team inputs. If a trade is viable, EXECUTE it using the tool. Do not ask for permission.",
             agent=head_trader,
-            expected_output="Final JSON execution plan.",
-            context=[research_task, analysis_task, risk_task] # This passes previous outputs to the boss
+            expected_output="Confirmation that the trade was executed or a reason for holding."
         )
 
         # --- 3. THE CREW ---
