@@ -10,6 +10,10 @@ class VirtualExchange:
         self.holdings = {} # e.g., {'PLTR': 50, 'NFLX': 10}
         self.provider = provider
         self.transaction_log = []
+        self.current_date = "N/A"
+
+    def update_date(self, date_str):
+        self.current_date = date_str
 
     def execute_trade(self, action: str, symbol: str, quantity: int, current_date: str):
         # 1. Get the price at that specific date
