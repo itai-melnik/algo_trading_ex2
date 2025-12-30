@@ -17,3 +17,8 @@ class MarketDataProvider(ABC):
     def get_account_balance(self) -> float:
         """Returns current cash balance."""
         pass
+
+    @abstractmethod
+    def execute_order(self, symbol: str, side: str, qty: int) -> str:
+        """Executes a market order. Returns Order ID or Status."""
+        pass

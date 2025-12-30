@@ -16,3 +16,6 @@ class MockDataProvider(MarketDataProvider):
 
     def get_account_balance(self) -> float:
         return 100000.0
+
+    def execute_order(self, symbol: str, side: str, qty: int) -> str:
+        return f"MOCK_ORDER_ID_123_FOR_{symbol}_{side}_{qty}"

@@ -46,3 +46,19 @@ class AlpacaDataProvider(MarketDataProvider):
         self.rate_limiter.wait_for_token()
         account = self.api.get_account()
         return float(account.cash)
+
+
+    def execute_order(self, symbol: str, side: str, qty: int) -> str:
+        self.rate_limiter.wait_for_token()
+        logger.info(f"[REAL EXECUTION] Sending {side} order for {qty} {symbol}...")
+        try:
+            order = self.api.submit_order(
+                symbol=symbol,
+                qty=qty,
+                side=side,
+                type='market',
+                time_in_force='gtc'
+            )
+            return str(order.id)
+        except Exception as e:
+            return f"Error: {str(e)}"
