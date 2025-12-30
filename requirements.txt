@@ -1,1 +1,5 @@
 pytest
+alpaca-trade-api
+joblib
+python-dotenv
+loguru
