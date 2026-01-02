@@ -23,7 +23,7 @@ class VirtualExchange:
         # Safe extraction of price from the data structure
         try:
             # Assuming data structure matches Alpaca's barset dictionary
-            # Adjust this line based on your exact data shape from Phase 2
+            # TODO: Adjust this line based on your exact data shape from Phase 2
             current_price = list(price_data.values())[0][0]['c'] 
         except (IndexError, KeyError):
             print(f"❌ ERROR: No price data found for {symbol} on {current_date}")

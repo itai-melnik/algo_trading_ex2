@@ -9,10 +9,22 @@ class MockDataProvider(MarketDataProvider):
         self.exchange = exchange
 
     def get_price_history(self, symbol: str, start_date: str, end_date: str):
-        # Return static fake data
+        # 1. Determine the price based on symbol
+        price = 100.0
+        if symbol == "PLTR":
+            price = 25.0
+        elif symbol == "NFLX":
+            price = 400.0
+        
+        # 2. Return the format expected by VirtualExchange
         return {
-            "2023-01-01": {"close": 150.0},
-            "2023-01-02": {"close": 155.0}
+            start_date: {
+                'close': price,
+                'open': price,
+                'high': price,
+                'low': price,
+                'volume': 1000
+            }
         }
 
     def get_latest_price(self, symbol: str) -> float:

@@ -3,3 +3,7 @@ alpaca-trade-api
 joblib
 python-dotenv
 loguru
+langchain-tools
+crewai-tools
+pydantic
+crewai

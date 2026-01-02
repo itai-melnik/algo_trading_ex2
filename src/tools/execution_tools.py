@@ -1,4 +1,4 @@
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 from pydantic import Field
 from src.data.interface import MarketDataProvider
 

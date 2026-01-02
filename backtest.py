@@ -46,7 +46,7 @@ for single_date in daterange(START_DATE, END_DATE):
     
     # A. Build the Crew for this specific day
     # Build Crew with the MOCK provider
-    trading_bot = TradingCrew(provider=mock_provider) 
+    trading_bot = TradingCrew(provider=mock_provider, exchange=exchange) 
     crew = trading_bot.build_crew(current_date=current_date_str, stock_selection=SYMBOLS)
 
     # B. Kickoff

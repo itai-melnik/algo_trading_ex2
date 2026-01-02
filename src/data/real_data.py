@@ -26,15 +26,20 @@ class AlpacaDataProvider(MarketDataProvider):
         
         # 2. Call API
         logger.info(f"Fetching REAL data for {symbol}...") # Debug log to prove caching works
-        barset = self.api.get_bars(
-            symbol, 
-            tradeapi.TimeFrame.Day, 
-            start=start_date, 
+        bars = self.api.get_bars(
+            symbol,
+            tradeapi.TimeFrame.Day,
+            start=start_date,
             end=end_date
         ).df
+
+        if bars.empty:
+            return {}
         
-        # 3. Return as simple dict or keep as DF
-        return barset.to_dict()
+        bars.index = bars.index.strftime('%Y-%m-%d')
+
+        # return dictionary with date as key and bar as value
+        return bars.to_dict(orient='index')
 
     # DO NOT cache real-time price unless necessary for short windows
     def get_latest_price(self, symbol: str) -> float:
