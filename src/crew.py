@@ -17,7 +17,11 @@ class TradingCrew:
         self.price_tool = StockPriceTool(provider=provider)
         self.history_tool = StockHistoryTool(provider=provider)
         self.balance_tool = AccountBalanceTool(provider=provider, exchange=exchange)
-        self.calc_tool = CalculatorTools().calculate
+        self.calc_tools = [
+            CalculatorTools.calculate_math_expression,
+            CalculatorTools.calculate_position_size,
+            CalculatorTools.calculate_reward_risk_ratio
+        ]
         self.execution_tool = ExecuteTradeTool(provider=provider)
 
     def build_crew(self, current_date: str, stock_selection: list):
@@ -54,7 +58,7 @@ class TradingCrew:
                 You use mathematical indicators (SMA, RSI, etc.) to identify entry and exit points.
                 You are cautious and precise.
             """),
-            tools=[self.price_tool, self.history_tool, self.calc_tool],
+            tools=[self.price_tool, self.history_tool] + self.calc_tools,
             verbose=True,
             allow_delegation=False
         )
@@ -70,7 +74,7 @@ class TradingCrew:
                 1. Never put more than 20% of cash into a single trade.
                 2. Always keep 10% of the portfolio in cash.
             """),
-            tools=[self.balance_tool, self.calc_tool],
+            tools=[self.balance_tool] + self.calc_tools,
             verbose=True,
             allow_delegation=False
         )

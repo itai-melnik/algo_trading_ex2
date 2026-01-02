@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 import json
 import re
 from datetime import timedelta, datetime
@@ -6,6 +9,14 @@ from src.data.real_data import AlpacaDataProvider
 from src.utils.rate_limiter import RateLimiter
 from src.simulation.virtual_exchange import VirtualExchange
 from src.data.mock_data import MockDataProvider
+
+
+script_dir = Path(__file__).parent
+env_path = script_dir / '.env'
+
+# Load with explicit path
+load_dotenv(dotenv_path=env_path)
+
 
 # 1. Configuration
 SYMBOLS = ['PLTR', 'NFLX', 'PLTK']
@@ -56,31 +67,6 @@ for single_date in daterange(START_DATE, END_DATE):
     total_val = exchange.get_total_portfolio_value(current_date_str)
     print(f"EOD Portfolio Value: ${total_val:,.2f}")
 
-    # # C. Parse Result (The messy part!)
-    # # The Head Trader returns text. We need to extract the JSON.
-    # try:
-    #     print(f"Raw Output: {result}")
-        
-    #     # Regex to find JSON block if the LLM adds extra text
-    #     match = re.search(r'\{.*\}', str(result), re.DOTALL)
-    #     if match:
-    #         clean_json = match.group(0)
-    #         decision = json.loads(clean_json)
-            
-    #         action = decision.get("action")
-    #         ticker = decision.get("ticker")
-    #         qty = int(decision.get("quantity", 0))
-            
-    #         if action in ["BUY", "SELL"] and qty > 0:
-    #             exchange.execute_trade(action, ticker, qty, current_date_str)
-    #         else:
-    #             print("Decision was HOLD or Invalid.")
-    #     else:
-    #         print("Could not parse JSON from agent output.")
-
-    # except Exception as e:
-    #     print(f"Error executing trade: {e}")
-    
 
 print("\nBacktest Complete.")
 print("Transactions:", exchange.transaction_log)
