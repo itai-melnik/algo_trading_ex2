@@ -20,13 +20,13 @@ class VirtualExchange:
         # Note: In a real backtest, you'd use the 'Open' or 'Close' of that date
         price_data = self.provider.get_price_history(symbol, current_date, current_date)
         
-        # Safe extraction of price from the data structure
         try:
-            # Assuming data structure matches Alpaca's barset dictionary
-            # TODO: Adjust this line based on your exact data shape from Phase 2
-            current_price = list(price_data.values())[0][0]['c'] 
-        except (IndexError, KeyError):
-            print(f"❌ ERROR: No price data found for {symbol} on {current_date}")
+
+            # We use 'close' (Pandas style)
+            current_price = price_data[current_date]['close']
+            
+        except (KeyError, IndexError):
+            print(f"❌ ERROR: No price data found for {symbol} on {current_date} (Market likely closed)")
             return
 
         cost = current_price * quantity
@@ -57,9 +57,9 @@ class VirtualExchange:
             if qty > 0:
                 price_data = self.provider.get_price_history(symbol, current_date, current_date)
                 try:
-                    price = list(price_data.values())[0][0]['c']
+                    price = price_data[current_date]['close']
                     equity += price * qty
-                except:
+                except (KeyError, IndexError):
                     pass # Skip if no price found (or use yesterday's price)
         return self.cash + equity
 

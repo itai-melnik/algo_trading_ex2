@@ -1,6 +1,7 @@
-from langchain.tools import tool
+from crewai.tools import tool
+from typing import Any
 from src.data.interface import MarketDataProvider
-from crewai_tools import BaseTool
+from crewai.tools import BaseTool
 from pydantic import Field
 
 class MarketTools:

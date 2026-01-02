@@ -1,5 +1,5 @@
 import re
-from langchain.tools import tool
+from crewai.tools import tool
 
 # Pre-compiled regex patterns for better performance
 _DANGEROUS_PATTERN = re.compile(
@@ -14,6 +14,7 @@ _SAFE_CHARS_PATTERN = re.compile(r'^[0-9+\-*/().\s]+$')
 class CalculatorTools:
     """Tools for performing mathematical calculations safely."""
     
+    @staticmethod
     @tool("Calculate General Math")
     def calculate_math_expression(expression: str):
         """
@@ -49,6 +50,7 @@ class CalculatorTools:
         except Exception:
             return "Error: Invalid input"
     
+    @staticmethod
     @tool("Calculate Position Size")
     def calculate_position_size(account_balance: float, risk_percentage: float, 
                                 entry_price: float, stop_loss: float) -> int:
@@ -69,6 +71,7 @@ class CalculatorTools:
             return 0
         return int((account_balance * risk_percentage) / risk_per_share)
 
+    @staticmethod
     @tool("Calculate Reward to Risk Ratio")
     def calculate_reward_risk_ratio(entry_price: float, stop_loss: float,
                                     profit_target: float) -> float:

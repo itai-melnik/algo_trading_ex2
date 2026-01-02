@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew, Process
-from langchain.tools import tool
+from crewai.tools import tool
 from textwrap import dedent
 from src.tools.market_tools import StockPriceTool, StockHistoryTool, AccountBalanceTool
 from src.tools.calculator import CalculatorTools
