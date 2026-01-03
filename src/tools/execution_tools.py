@@ -1,3 +1,4 @@
+from typing import Any
 from crewai.tools import BaseTool
 from pydantic import Field
 from src.data.interface import MarketDataProvider
@@ -6,6 +7,7 @@ class ExecuteTradeTool(BaseTool):
     name: str = "Execute Trade"
     description: str = "Use this to BUY or SELL. Input format: 'SIDE|TICKER|QTY' (e.g., 'BUY|PLTR|10'). Returns 'Order executed successfully. ID: {order_id}' on success, or an error message if execution fails. Always check the return value to confirm the trade was executed."
     provider: MarketDataProvider = Field(exclude=True)
+    exchange: Any = Field(default=None, exclude=True)  # VirtualExchange for backtesting
 
     def _run(self, order_string: str) -> str:
         try:
@@ -25,10 +27,21 @@ class ExecuteTradeTool(BaseTool):
             except ValueError:
                 return "Error: Quantity must be an integer"
 
-            # 3. Execute via Provider
-            
-            result = self.provider.execute_order(symbol, side, qty)
-            return f"Order executed successfully. ID: {result}"
+            # 3. Execute via VirtualExchange (for backtesting) or Provider (for live)
+            if self.exchange is not None:
+                # Backtesting mode - use VirtualExchange for simulated trading
+                current_date = getattr(self.exchange, 'current_date', 'UNKNOWN')
+                self.exchange.execute_trade(
+                    action=side,
+                    symbol=symbol,
+                    quantity=qty,
+                    current_date=current_date
+                )
+                return f"Order executed successfully. ID: VIRTUAL_{symbol}_{qty}"
+            else:
+                # Live mode - use provider (Alpaca)
+                result = self.provider.execute_order(symbol, side, qty)
+                return f"Order executed successfully. ID: {result}"
 
         except Exception as e:
             return f"Execution Failed: {str(e)}"
