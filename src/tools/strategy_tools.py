@@ -6,6 +6,7 @@ that return structured signals. All heavy computation is done in the
 strategy layer, not by the LLM.
 """
 import json
+import numpy as np
 import pandas as pd
 from typing import Any
 from datetime import datetime, timedelta
@@ -13,6 +14,20 @@ from crewai.tools import BaseTool
 from pydantic import Field
 
 from src.data.interface import MarketDataProvider
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, (np.bool_, np.boolean)):
+            return bool(obj)
+        if isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        if isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 from src.strategies import (
     EnsembleStrategy,
     SMACrossoverStrategy,
@@ -93,7 +108,7 @@ class GenerateSignalsTool(BaseTool):
             # Generate detailed analysis
             analysis = self._ensemble.get_detailed_analysis(symbol, df)
             
-            return json.dumps(analysis, indent=2)
+            return json.dumps(analysis, indent=2, cls=NumpyEncoder)
             
         except Exception as e:
             return json.dumps({
@@ -204,18 +219,18 @@ class RiskFilterTool(BaseTool):
             approved = len(issues) == 0 and max_shares > 0
             
             return json.dumps({
-                "approved": approved,
+                "approved": bool(approved),
                 "symbol": symbol,
                 "action": action,
-                "max_shares": max_shares,
-                "current_price": current_price,
-                "max_trade_value": max_shares * current_price,
-                "portfolio_value": portfolio_value,
-                "available_cash": available_cash,
-                "current_position_shares": current_holdings,
+                "max_shares": int(max_shares),
+                "current_price": float(current_price),
+                "max_trade_value": float(max_shares * current_price),
+                "portfolio_value": float(portfolio_value),
+                "available_cash": float(available_cash),
+                "current_position_shares": int(current_holdings),
                 "issues": issues if issues else None,
                 "reason": "Trade approved within risk limits" if approved else "; ".join(issues)
-            }, indent=2)
+            }, indent=2, cls=NumpyEncoder)
             
         except Exception as e:
             return json.dumps({
