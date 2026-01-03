@@ -2,26 +2,31 @@
 """
 Agent Trader - Unified Trading Script
 
-Runs AI trading agents in two modes:
+Runs trading in three modes:
+- FAST BACKTEST (default): Pure Python strategy engine, no LLM calls
+- CREW BACKTEST: CrewAI with LLM orchestration
 - LIVE: Real-time paper trading with Alpaca
-- BACKTEST: Historical simulation with mock or real data
 
 Usage:
-    # Live paper trading (runs until Ctrl+C)
-    python agent_trader.py --live --interval 300
-
-    # Backtest on historical week with mock data
+    # Fast backtest (default, no LLM - very fast!)
     python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07
 
-    # Backtest with real Alpaca historical data
+    # Fast backtest with real Alpaca historical data
     python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --real-data
+
+    # Crew backtest with LLM orchestration (slower)
+    python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --crew
+
+    # Live paper trading (runs until Ctrl+C)
+    python agent_trader.py --live --interval 300
 """
 import argparse
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -51,6 +56,11 @@ logger.add(
 # Global flag for graceful shutdown
 running = True
 
+# Risk Management Parameters
+MAX_POSITION_PCT = 0.20      # Max 20% of portfolio in one position
+MIN_CASH_RESERVE_PCT = 0.10  # Keep 10% cash reserve
+MIN_CONFIDENCE = 0.30        # Minimum confidence to trade
+
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully."""
@@ -59,9 +69,253 @@ def signal_handler(signum, frame):
     running = False
 
 
-def run_backtest_mode(args):
+# ==============================================================================
+# HELPER FUNCTIONS FOR FAST BACKTEST
+# ==============================================================================
+
+def get_price_df(provider, symbol: str, end_date: str, lookback_days: int = 30) -> pd.DataFrame:
+    """Fetch price history and convert to DataFrame."""
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    start_dt = end_dt - timedelta(days=lookback_days + 10)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    
+    price_data = provider.get_price_history(symbol, start_date, end_date)
+    
+    if not price_data:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame.from_dict(price_data, orient='index')
+    df.index = pd.to_datetime(df.index)
+    df = df.sort_index()
+    return df
+
+
+def apply_risk_rules(signal, exchange, provider, current_date: str) -> dict:
     """
-    Run backtest with historical dates.
+    Apply risk management rules to a signal.
+    
+    Returns:
+        dict with 'approved', 'max_shares', and 'reason'
+    """
+    symbol = signal.symbol
+    action = signal.action
+    confidence = signal.confidence
+    
+    # Get portfolio state
+    cash = exchange.cash
+    portfolio_value = exchange.get_total_portfolio_value(current_date)
+    current_holdings = exchange.holdings.get(symbol, 0)
+    current_price = provider.get_latest_price(symbol)
+    
+    # Rule 1: Minimum confidence
+    if confidence < MIN_CONFIDENCE:
+        return {
+            'approved': False,
+            'max_shares': 0,
+            'reason': f"Confidence {confidence:.0%} below minimum {MIN_CONFIDENCE:.0%}"
+        }
+    
+    # Rule 2: Cash reserve
+    min_cash = portfolio_value * MIN_CASH_RESERVE_PCT
+    available_cash = cash - min_cash
+    if available_cash <= 0:
+        return {
+            'approved': False,
+            'max_shares': 0,
+            'reason': f"Cash ${cash:.2f} at minimum reserve"
+        }
+    
+    # Rule 3: Max position size
+    max_position_value = portfolio_value * MAX_POSITION_PCT
+    current_position_value = current_holdings * current_price
+    
+    if action == "BUY":
+        remaining_allocation = max_position_value - current_position_value
+        max_buy_value = min(available_cash, remaining_allocation)
+        max_shares = int(max_buy_value / current_price) if current_price > 0 else 0
+        
+        if max_shares <= 0:
+            return {
+                'approved': False,
+                'max_shares': 0,
+                'reason': "Position at max allocation or insufficient cash"
+            }
+    elif action == "SELL":
+        max_shares = current_holdings
+        if max_shares <= 0:
+            return {
+                'approved': False,
+                'max_shares': 0,
+                'reason': f"No {symbol} shares to sell"
+            }
+    else:
+        return {
+            'approved': False,
+            'max_shares': 0,
+            'reason': "HOLD signal - no trade needed"
+        }
+    
+    return {
+        'approved': True,
+        'max_shares': max_shares,
+        'reason': "Trade approved within risk limits"
+    }
+
+
+def calculate_position_size(confidence: float, max_shares: int) -> int:
+    """Scale position size based on confidence."""
+    if confidence >= 0.8:
+        scale = 1.0
+    elif confidence >= 0.5:
+        scale = 0.5 + (confidence - 0.5) * 1.0
+    elif confidence >= 0.3:
+        scale = 0.3 + (confidence - 0.3) * 1.0
+    else:
+        scale = 0.0
+    
+    return int(max_shares * scale)
+
+
+# ==============================================================================
+# FAST BACKTEST MODE: Pure Python Strategy Engine (No LLM)
+# ==============================================================================
+
+def run_fast_backtest_mode(args):
+    """
+    Run backtest using pure Python strategy engine - no LLM calls.
+    
+    This is 10-100x faster than crew mode since all computation
+    is done in Python without any LLM API calls.
+    """
+    from src.simulation.virtual_exchange import VirtualExchange
+    from src.utils.date_sources import historical_dates
+    from src.strategies import (
+        EnsembleStrategy,
+        SMACrossoverStrategy,
+        MomentumStrategy,
+        MeanReversionStrategy,
+        VolatilityFilter,
+    )
+    
+    symbols = [s.strip().upper() for s in args.symbols.split(',')]
+    
+    logger.info("=" * 60)
+    logger.info("FAST BACKTEST MODE (No LLM)")
+    logger.info("=" * 60)
+    logger.info(f"Period: {args.start} to {args.end}")
+    logger.info(f"Symbols: {symbols}")
+    logger.info(f"Data Source: {'Alpaca (Real Historical)' if args.real_data else 'Mock (Synthetic)'}")
+    logger.info(f"Initial Cash: ${args.cash:,.2f}")
+    logger.info("=" * 60)
+    
+    # Setup provider based on --real-data flag
+    if args.real_data:
+        from src.data.real_data import AlpacaDataProvider
+        from src.utils.rate_limiter import RateLimiter
+        
+        limiter = RateLimiter(max_calls=45, period_seconds=60)
+        provider = AlpacaDataProvider(rate_limiter=limiter)
+        logger.info("Using Alpaca for historical price data")
+    else:
+        from src.data.mock_data import MockDataProvider
+        
+        provider = MockDataProvider(seed=args.seed)
+        logger.info(f"Using Mock data with seed={args.seed}")
+    
+    # Setup VirtualExchange for simulated trading
+    exchange = VirtualExchange(initial_cash=args.cash, provider=provider)
+    
+    # Link exchange to provider (for MockDataProvider)
+    if hasattr(provider, 'set_exchange'):
+        provider.set_exchange(exchange)
+    
+    # Build ensemble strategy
+    ensemble = EnsembleStrategy(
+        strategies=[
+            (SMACrossoverStrategy(fast_period=5, slow_period=20), 1.0),
+            (MomentumStrategy(lookback_days=10, threshold=0.03), 1.0),
+            (MeanReversionStrategy(period=20, num_std=2.0), 0.8),
+        ],
+        volatility_filter=VolatilityFilter(atr_period=14, max_atr_percent=8.0),
+        min_confidence=0.2
+    )
+    
+    # Run through historical dates
+    cycle_count = 0
+    for current_date in historical_dates(args.start, args.end):
+        if not running:
+            break
+        
+        cycle_count += 1
+        exchange.update_date(current_date)
+        
+        logger.info(f"--- Trading Cycle #{cycle_count}: {current_date} ---")
+        
+        # Log prices for the day
+        for sym in symbols:
+            try:
+                price_data = provider.get_price_history(sym, current_date, current_date)
+                if current_date in price_data:
+                    p = price_data[current_date]
+                    logger.debug(f"{sym}: ${p['close']:.2f}")
+            except Exception as e:
+                logger.warning(f"Could not get price for {sym}: {e}")
+        
+        # Generate signals for all symbols
+        best_signal = None
+        for symbol in symbols:
+            df = get_price_df(provider, symbol, current_date)
+            if df.empty:
+                continue
+            
+            signal = ensemble.generate_signal(symbol, df)
+            
+            if signal.action != "HOLD":
+                if best_signal is None or signal.confidence > best_signal.confidence:
+                    best_signal = signal
+        
+        # Process best signal
+        if best_signal and best_signal.action != "HOLD":
+            logger.info(f"Signal: {best_signal.action} {best_signal.symbol} ({best_signal.confidence:.0%})")
+            
+            # Apply risk rules
+            risk_result = apply_risk_rules(best_signal, exchange, provider, current_date)
+            
+            if risk_result['approved']:
+                # Calculate position size
+                shares = calculate_position_size(best_signal.confidence, risk_result['max_shares'])
+                
+                if shares > 0:
+                    # Execute trade
+                    provider.execute_order(
+                        best_signal.symbol,
+                        best_signal.action,
+                        shares
+                    )
+                    logger.info(f"Executed: {best_signal.action} {shares} {best_signal.symbol}")
+                else:
+                    logger.info(f"Holding: Position size = 0")
+            else:
+                logger.info(f"Holding: {risk_result['reason']}")
+        else:
+            logger.info("Holding: No actionable signals")
+        
+        # Log portfolio status
+        portfolio_value = exchange.get_total_portfolio_value(current_date)
+        logger.info(f"Portfolio: ${portfolio_value:,.2f} | Cash: ${exchange.cash:,.2f} | Holdings: {exchange.holdings}")
+    
+    # Final summary
+    _print_summary(exchange, args.cash, args.end, "FAST BACKTEST")
+    return exchange
+
+
+# ==============================================================================
+# CREW BACKTEST MODE: CrewAI with LLM Orchestration
+# ==============================================================================
+
+def run_crew_backtest_mode(args):
+    """
+    Run backtest with CrewAI and LLM orchestration.
     
     Uses MockDataProvider + VirtualExchange for local simulation,
     or AlpacaDataProvider + VirtualExchange for real historical data.
@@ -73,7 +327,8 @@ def run_backtest_mode(args):
     symbols = [s.strip().upper() for s in args.symbols.split(',')]
     
     logger.info("=" * 60)
-    logger.info("BACKTEST MODE")
+    logger.info("CREW BACKTEST MODE (With LLM)")
+    logger.info("=" * 60)
     logger.info(f"Period: {args.start} to {args.end}")
     logger.info(f"Symbols: {symbols}")
     logger.info(f"Data Source: {'Alpaca (Real Historical)' if args.real_data else 'Mock (Synthetic)'}")
@@ -135,8 +390,13 @@ def run_backtest_mode(args):
         logger.info(f"Portfolio Value: ${portfolio_value:,.2f} | Cash: ${exchange.cash:,.2f} | Holdings: {exchange.holdings}")
     
     # Final summary
-    _print_summary(exchange, args.cash, args.end, "BACKTEST")
+    _print_summary(exchange, args.cash, args.end, "CREW BACKTEST")
+    return exchange
 
+
+# ==============================================================================
+# LIVE MODE: Real-time Paper Trading with Alpaca
+# ==============================================================================
 
 def run_live_mode(args):
     """
@@ -210,6 +470,10 @@ def run_live_mode(args):
     logger.info("=" * 60)
 
 
+# ==============================================================================
+# UTILITY FUNCTIONS
+# ==============================================================================
+
 def _print_summary(exchange, initial_cash: float, end_date: str, mode: str):
     """Print final trading session summary."""
     final_value = exchange.get_total_portfolio_value(end_date)
@@ -231,16 +495,28 @@ def _print_summary(exchange, initial_cash: float, end_date: str, mode: str):
             logger.info(f"  {tx['date']} | {tx['action']:4} | {tx['qty']:4} x {tx['symbol']:5} @ ${tx['price']:.2f}")
 
 
+# ==============================================================================
+# MAIN
+# ==============================================================================
+
 def main():
     """Main entry point with CLI argument parsing."""
     parser = argparse.ArgumentParser(
-        description="Agent Trader - AI-powered trading with CrewAI",
+        description="Agent Trader - AI-powered trading with strategy engine and CrewAI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python agent_trader.py --live --interval 300
+  # Fast backtest (no LLM, default)
   python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07
+
+  # Fast backtest with real Alpaca data
   python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --real-data
+
+  # Crew backtest with LLM orchestration
+  python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --crew
+
+  # Live paper trading
+  python agent_trader.py --live --interval 300
         """
     )
     
@@ -250,8 +526,8 @@ Examples:
     mode_group.add_argument('--backtest', action='store_true', help='Run historical backtest')
     
     # Common arguments
-    parser.add_argument('--symbols', type=str, default='PLTR,NFLX',
-                        help='Comma-separated list of symbols (default: PLTR,NFLX)')
+    parser.add_argument('--symbols', type=str, default='PLTR,NFLX,PLTK',
+                        help='Comma-separated list of symbols (default: PLTR,NFLX,PLTK)')
     
     # Live mode arguments
     parser.add_argument('--interval', type=int, default=300,
@@ -262,6 +538,8 @@ Examples:
     parser.add_argument('--end', type=str, help='Backtest end date (YYYY-MM-DD)')
     parser.add_argument('--real-data', action='store_true',
                         help='Use real Alpaca historical data instead of mock')
+    parser.add_argument('--crew', action='store_true',
+                        help='Use CrewAI with LLM orchestration (slower but with reasoning)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for mock data generation (default: 42)')
     parser.add_argument('--cash', type=float, default=100000.0,
@@ -286,10 +564,12 @@ Examples:
     # Run appropriate mode
     if args.live:
         run_live_mode(args)
-    else:
-        run_backtest_mode(args)
+    elif args.backtest:
+        if args.crew:
+            run_crew_backtest_mode(args)
+        else:
+            run_fast_backtest_mode(args)
 
 
 if __name__ == "__main__":
     main()
-
