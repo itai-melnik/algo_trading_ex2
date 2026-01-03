@@ -2,3 +2,5 @@
 .DS_Store
 venv/
 __pycache__/
+.cursor/
+.cache/

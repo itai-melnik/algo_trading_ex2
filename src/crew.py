@@ -74,7 +74,7 @@ class TradingCrew:
                 1. Never put more than 20% of cash into a single trade.
                 2. Always keep 10% of the portfolio in cash.
             """),
-            tools=[self.balance_tool] + self.calc_tools,
+            tools=[self.balance_tool, self.price_tool] + self.calc_tools,
             verbose=True,
             allow_delegation=False
         )
@@ -91,9 +91,13 @@ class TradingCrew:
                 2. Check with Risk Manager for MAX position size (Crucial!).
                 3. If the signal is strong and Risk Manager approves:
                    USE the 'Execute Trade' tool immediately.
-                4. If no trade is needed, just say "Holding cash."
+                4. ALWAYS CHECK the tool's return value to confirm success:
+                   - If it says "Order executed successfully. ID: ...", the trade went through.
+                   - If it says "Error:" or "Execution Failed:", the trade did NOT execute.
+                5. Report the execution status clearly in your response.
+                6. If no trade is needed, just say "Holding cash."
             """),
-            tools=[self.execution_tool], # Give them the button
+            tools=[self.execution_tool] + self.calc_tools, # Give them the button
             verbose=True,
             allow_delegation=True
         )

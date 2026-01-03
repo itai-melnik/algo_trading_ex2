@@ -4,7 +4,7 @@ from src.data.interface import MarketDataProvider
 
 class ExecuteTradeTool(BaseTool):
     name: str = "Execute Trade"
-    description: str = "Use this to BUY or SELL. Input format: 'SIDE|TICKER|QTY' (e.g., 'BUY|PLTR|10'). Returns Order ID."
+    description: str = "Use this to BUY or SELL. Input format: 'SIDE|TICKER|QTY' (e.g., 'BUY|PLTR|10'). Returns 'Order executed successfully. ID: {order_id}' on success, or an error message if execution fails. Always check the return value to confirm the trade was executed."
     provider: MarketDataProvider = Field(exclude=True)
 
     def _run(self, order_string: str) -> str:
@@ -26,7 +26,8 @@ class ExecuteTradeTool(BaseTool):
                 return "Error: Quantity must be an integer"
 
             # 3. Execute via Provider
-            result = self.provider.execute_order(symbol, side.lower(), qty)
+            
+            result = self.provider.execute_order(symbol, side, qty)
             return f"Order executed successfully. ID: {result}"
 
         except Exception as e:

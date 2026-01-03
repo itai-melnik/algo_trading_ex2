@@ -8,24 +8,28 @@ from loguru import logger
 
 load_dotenv()
 
+
 class AlpacaDataProvider(MarketDataProvider):
+    """
+    Real data provider for Alpaca paper/live trading.
+    All orders go directly to Alpaca - no VirtualExchange needed.
+    Alpaca paper trading already simulates the exchange for you.
+    """
+    
     def __init__(self, rate_limiter: RateLimiter):
         self.api = tradeapi.REST(
             os.getenv("ALPACA_KEY"),
             os.getenv("ALPACA_SECRET"),
-            base_url="https://paper-api.alpaca.markets"
+            base_url=os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
         )
-        #Dependency injection for the rate limiter
         self.rate_limiter = rate_limiter
 
-    #Cache history
     @disk_cache
     def get_price_history(self, symbol: str, start_date: str, end_date: str):
-        # 1. Check Rate Limit
+        """Fetch historical OHLCV data from Alpaca."""
         self.rate_limiter.wait_for_token()
         
-        # 2. Call API
-        logger.info(f"Fetching REAL data for {symbol}...") # Debug log to prove caching works
+        logger.info(f"Fetching REAL data for {symbol}...")
         bars = self.api.get_bars(
             symbol,
             tradeapi.TimeFrame.Day,
@@ -37,33 +41,38 @@ class AlpacaDataProvider(MarketDataProvider):
             return {}
         
         bars.index = bars.index.strftime('%Y-%m-%d')
-
-        # return dictionary with date as key and bar as value
         return bars.to_dict(orient='index')
 
-    # DO NOT cache real-time price unless necessary for short windows
     def get_latest_price(self, symbol: str) -> float:
+        """Get real-time price from Alpaca."""
         self.rate_limiter.wait_for_token()
         trade = self.api.get_latest_trade(symbol)
         return float(trade.price)
 
     def get_account_balance(self) -> float:
+        """Get actual cash balance from Alpaca account."""
         self.rate_limiter.wait_for_token()
         account = self.api.get_account()
         return float(account.cash)
 
-
     def execute_order(self, symbol: str, side: str, qty: int) -> str:
+        """
+        Execute order directly on Alpaca (paper or live).
+        Alpaca handles all the exchange simulation for paper trading.
+        """
         self.rate_limiter.wait_for_token()
-        logger.info(f"[REAL EXECUTION] Sending {side} order for {qty} {symbol}...")
+        logger.info(f"[ALPACA] Sending {side} order for {qty} {symbol}...")
+        
         try:
             order = self.api.submit_order(
                 symbol=symbol,
                 qty=qty,
-                side=side,
+                side=side.lower(),  # Alpaca expects lowercase
                 type='market',
                 time_in_force='gtc'
             )
+            logger.info(f"[ALPACA] Order submitted: {order.id}")
             return str(order.id)
         except Exception as e:
+            logger.error(f"[ALPACA] Order failed: {e}")
             return f"Error: {str(e)}"
