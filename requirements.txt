@@ -6,4 +6,6 @@ loguru
 crewai-tools
 crewai
 pydantic
-
+scikit-learn
+pandas
+numpy
