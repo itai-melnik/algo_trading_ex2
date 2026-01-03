@@ -1,9 +1,13 @@
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
 from textwrap import dedent
+from langchain_openai import ChatOpenAI
 from src.tools.market_tools import StockPriceTool, StockHistoryTool, AccountBalanceTool
 from src.tools.calculator import CalculatorTools
 from src.tools.execution_tools import ExecuteTradeTool
+
+# Use GPT-4o-mini for faster, cheaper execution
+llm = ChatOpenAI(model="pt-5-mini")
 
 class TradingCrew:
     def __init__(self, provider, exchange=None):
@@ -44,6 +48,7 @@ class TradingCrew:
                 You strictly NEVER invent news. If you don't know, say you don't know.
             """),
             tools=[], # TODO: Add a NewsTool (SerpApi)
+            llm=llm,
             verbose=True,
             allow_delegation=False
         )
@@ -59,6 +64,7 @@ class TradingCrew:
                 You are cautious and precise.
             """),
             tools=[self.price_tool, self.history_tool] + self.calc_tools,
+            llm=llm,
             verbose=True,
             allow_delegation=False
         )
@@ -75,6 +81,7 @@ class TradingCrew:
                 2. Always keep 10% of the portfolio in cash.
             """),
             tools=[self.balance_tool, self.price_tool] + self.calc_tools,
+            llm=llm,
             verbose=True,
             allow_delegation=False
         )
@@ -98,6 +105,7 @@ class TradingCrew:
                 6. If no trade is needed, just say "Holding cash."
             """),
             tools=[self.execution_tool] + self.calc_tools, # Give them the button
+            llm=llm,
             verbose=True,
             allow_delegation=True
         )
