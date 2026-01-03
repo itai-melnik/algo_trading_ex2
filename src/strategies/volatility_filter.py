@@ -62,10 +62,10 @@ class VolatilityFilter:
         current_price = closes[-1]
         atr_percent = (atr / current_price) * 100
         
-        # Check if within threshold
-        can_trade = atr_percent <= self.max_atr_percent
+        # Check if within threshold (convert to Python bool for JSON serialization)
+        can_trade = bool(atr_percent <= self.max_atr_percent)
         
-        return can_trade, atr_percent
+        return can_trade, float(atr_percent)
     
     def get_atr_details(self, symbol: str, price_history: pd.DataFrame) -> dict:
         """
@@ -78,9 +78,9 @@ class VolatilityFilter:
         
         return {
             "symbol": symbol,
-            "atr_percent": round(atr_percent, 2),
-            "max_allowed_percent": self.max_atr_percent,
-            "can_trade": can_trade,
+            "atr_percent": float(round(atr_percent, 2)),
+            "max_allowed_percent": float(self.max_atr_percent),
+            "can_trade": bool(can_trade),
             "reason": "Low volatility - safe to trade" if can_trade else f"High volatility ({atr_percent:.1f}%) exceeds threshold ({self.max_atr_percent}%)"
         }
 

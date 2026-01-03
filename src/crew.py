@@ -50,7 +50,7 @@ class TradingCrew:
             exchange=exchange
         )
         self.position_tool = PositionSizeTool(provider=provider)
-        self.execution_tool = ExecuteTradeTool(provider=provider)
+        self.execution_tool = ExecuteTradeTool(provider=provider, exchange=exchange)
         
         # Supporting tools
         self.price_tool = StockPriceTool(provider=provider)

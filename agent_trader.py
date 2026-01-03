@@ -286,11 +286,13 @@ def run_fast_backtest_mode(args):
                 shares = calculate_position_size(best_signal.confidence, risk_result['max_shares'])
                 
                 if shares > 0:
-                    # Execute trade
-                    provider.execute_order(
-                        best_signal.symbol,
-                        best_signal.action,
-                        shares
+                    # Execute trade via VirtualExchange (not provider!)
+                    # This ensures backtesting uses simulated trading even with real price data
+                    exchange.execute_trade(
+                        action=best_signal.action,
+                        symbol=best_signal.symbol,
+                        quantity=shares,
+                        current_date=current_date
                     )
                     logger.info(f"Executed: {best_signal.action} {shares} {best_signal.symbol}")
                 else:
