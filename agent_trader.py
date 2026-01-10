@@ -436,7 +436,7 @@ def run_live_mode(args):
     
     # Run trading loop
     cycle_count = 0
-    for current_datetime in live_dates(interval_seconds=args.interval):
+    for current_datetime in live_dates(interval_seconds=args.interval, should_stop=lambda: not running):
         if not running:
             break
             
