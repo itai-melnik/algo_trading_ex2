@@ -38,7 +38,7 @@ def historical_dates(start_date: str, end_date: str) -> Generator[str, None, Non
         current += timedelta(days=1)
 
 
-def live_dates(interval_seconds: int = 300, max_iterations: int = None) -> Generator[str, None, None]:
+def live_dates(interval_seconds: int = 300, max_iterations: int = None, should_stop: callable = None) -> Generator[str, None, None]:
     """
     Yields current datetime at specified intervals during market hours.
     
@@ -46,6 +46,7 @@ def live_dates(interval_seconds: int = 300, max_iterations: int = None) -> Gener
     
     :param interval_seconds: Seconds between each trading cycle (default: 300 = 5 min)
     :param max_iterations: Optional limit on iterations (for testing)
+    :param should_stop: Optional callable that returns True when shutdown is requested
     :yields: Current datetime string in YYYY-MM-DD HH:MM format
     
     Behavior:
@@ -57,6 +58,10 @@ def live_dates(interval_seconds: int = 300, max_iterations: int = None) -> Gener
     iterations = 0
     
     while max_iterations is None or iterations < max_iterations:
+        # Check for shutdown request
+        if should_stop and should_stop():
+            return
+        
         now = datetime.now(ET)
         
         if is_market_open(now):
@@ -78,6 +83,8 @@ def live_dates(interval_seconds: int = 300, max_iterations: int = None) -> Gener
                 # Sleep in chunks to allow for graceful shutdown
                 sleep_chunk = 60  # Check every minute
                 while wait_seconds > 0:
+                    if should_stop and should_stop():
+                        return
                     time.sleep(min(sleep_chunk, wait_seconds))
                     wait_seconds -= sleep_chunk
 

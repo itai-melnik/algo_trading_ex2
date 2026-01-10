@@ -1,1 +1,90 @@
-Itai Melnik Assignment 3 exercise 2
+# Agent Trader
+
+An AI-powered algorithmic trading system that uses an ensemble of trading strategies to generate buy/sell signals. The system supports both historical backtesting and live paper trading via Alpaca.
+
+## Features
+
+- Ensemble trading strategies: SMA Crossover, Momentum, Mean Reversion, Neural Network Predictor, and Volatility Filter
+- Risk management: Position sizing, cash reserves, and confidence thresholds
+- Dual execution modes: Fast backtesting (pure Python) or CrewAI orchestration (LLM-powered)
+- Data sources: Mock data for testing or real Alpaca historical data
+- Live trading: Paper trading with Alpaca API integration
+
+## Prerequisites
+
+- Python 3.12+
+- Virtual environment with dependencies installed
+- `.env` file configured with:
+  - `ALPACA_KEY` and `ALPACA_SECRET` for live trading
+  - `ALPACA_BASE_URL=https://paper-api.alpaca.markets`
+  - `OPENAI_API_KEY` (if using `--crew` mode)
+
+## Usage
+
+### Live Paper Trading
+
+Run live paper trading that executes trades during market hours:
+
+```bash
+python agent_trader.py --live --interval 300 --symbols PLTR,NFLX
+```
+
+- `--live`: Enable live trading mode
+- `--interval SECONDS`: Seconds between trading cycles (default: 300)
+- `--symbols SYMBOLS`: Comma-separated stock symbols (default: PLTR,NFLX,PLTK)
+
+The system will wait if the market is closed and automatically start trading when it opens. Press Ctrl+C to stop gracefully.
+
+### Historical Backtesting
+
+Run backtests on historical data:
+
+```bash
+python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07
+```
+
+**Required arguments:**
+- `--backtest`: Enable backtest mode
+- `--start DATE`: Start date in YYYY-MM-DD format
+- `--end DATE`: End date in YYYY-MM-DD format
+
+**Optional arguments:**
+- `--symbols SYMBOLS`: Stock symbols to trade (default: PLTR,NFLX,PLTK)
+- `--real-data`: Use real Alpaca historical data instead of mock data
+- `--crew`: Use CrewAI with LLM orchestration (slower, provides reasoning)
+- `--cash AMOUNT`: Initial cash balance (default: 100000.0)
+- `--seed INT`: Random seed for mock data generation (default: 42)
+
+**Examples:**
+
+```bash
+# Fast backtest with mock data (default, no LLM)
+python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07
+
+# Backtest with real Alpaca historical data
+python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --real-data
+
+# Backtest with CrewAI orchestration
+python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --crew
+
+# Custom symbols and initial cash
+python agent_trader.py --backtest --start 2023-11-01 --end 2023-11-07 --symbols AAPL,MSFT --cash 50000
+```
+
+## Output
+
+The system logs all trading decisions, executed trades, and portfolio performance. Backtest results include:
+- Total return and percentage gain
+- Number of trades executed
+- Final portfolio value
+- Transaction log with all buy/sell actions
+
+Logs are written to `logs/agent_trader_YYYY-MM-DD.log` for detailed debugging.
+
+## Architecture
+
+- **Strategy Engine**: Pure Python implementation using pandas for signal generation
+- **Virtual Exchange**: Simulates trading for backtesting without external API calls
+- **Data Providers**: Abstraction layer supporting mock or real Alpaca data
+- **CrewAI Integration**: Optional LLM orchestration layer for enhanced decision-making
+- **Risk Management**: Built-in position sizing, cash reserves, and confidence filtering
