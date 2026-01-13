@@ -12,9 +12,8 @@ from src.tools.market_tools import StockPriceTool, AccountBalanceTool
 from src.tools.strategy_tools import GenerateSignalsTool, RiskFilterTool, PositionSizeTool
 from src.tools.execution_tools import ExecuteTradeTool
 
-# Use GPT-4o-mini for faster, cheaper execution
 # The LLM now only orchestrates - doesn't compute
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm = ChatOpenAI(model="gpt-5-mini", temperature=0)
 
 
 class TradingCrew:
